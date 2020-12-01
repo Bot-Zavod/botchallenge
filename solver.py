@@ -11,17 +11,13 @@ from astar import Node
 """ This class should contain the movement generation algorithm."""
 class DirectionSolver:
 
-    def __init__(self):
-        print("NEWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWw")
+    def __init__(self):  # initializes on websocket start
         self._board = None
         self._non_barrier = None
         self._board_size = None
         
         self.is_jumping = False
         self.goal = "EXIT"
-        
-        self.visited = set() # List to keep track of visited nodes.
-        self.queue = []     #Initialize a queue
         
         self.сhache = None
 
