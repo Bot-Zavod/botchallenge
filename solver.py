@@ -6,7 +6,7 @@ from command import Command
 from element import Element
 
 from astar import Node
-
+from gamepad import GamepadRoboController
 
 """ This class should contain the movement generation algorithm."""
 class DirectionSolver:
@@ -20,6 +20,8 @@ class DirectionSolver:
         self.goal = "EXIT"
         
         self.сhache = None
+
+        self.gp = GamepadRoboController()
 
     def get(self, board_string):
         self._board = Board(board_string)
@@ -164,7 +166,7 @@ class DirectionSolver:
         cmd = ''
         if self.is_jumping:
             self.is_jumping = False
-        else:
+        elif False:
             start = board.get_hero().get_coord()
             end_points = board.get_exits()
             golds = board.get_golds()
@@ -205,7 +207,7 @@ class DirectionSolver:
                 if board.is_at(*step, Element('HOLE')):
                     cmd = f"ACT(1),{cmd}"
                     self.is_jumping = True
-
+        cmd = self.gp.get_action_code()
         _command = Command(cmd)
         print("Sending Command: {}\n".format(_command.to_string()))
         return _command.get_command()
