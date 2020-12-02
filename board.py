@@ -66,18 +66,60 @@ class Board:
         # points.update(self.get_holes())
         # points.update(self.get_empty())        
         points.update(self.get_lasers())
-        points.add(self.get_hero()) # single object
         points.update(self.get_other_heroes())
-        return {point.get_coord() for point in points}
+        points = {point.get_coord() for point in points}
+        points.add(self.get_hero()) # single object
+        return points
     
     def jump_over(self):
         points = set()
         points.update(self.get_holes())
         points.update(self.get_boxes())
         # points.update(self.get_other_heroes())
-        points.update(self.get_laser_machines())        
-        return {point.get_coord() for point in points}
+        points.update(self.get_laser_machines())
 
+        points = {point.get_coord() for point in points}
+        lasers = self.check_lasers()
+        if lasers:
+            points.update(lasers)
+        points.update(self.check_danger_enemies())
+        return points
+
+    def check_lasers(self):
+        points = set()
+        #Calculate all points for next Lasers
+        
+        possible_lasers = ('LASER_LEFT', 'LASER_RIGHT', 'LASER_UP', 'LASER_DOWN')
+        charged_guns = ('LASER_MACHINE_READY_LEFT', 'LASER_MACHINE_READY_RIGHT', 'LASER_MACHINE_READY_UP', 'LASER_MACHINE_READY_LEFT')
+        actions = ((-1,0), (1,0), (0,-1), (0,1))
+        for laser_dir, machine, action in zip(possible_lasers, charged_guns, actions):
+            lasers = self._find_all(Element(laser_dir))
+            lasers += self._find_all(Element(machine))
+            points.update((laser.get_x() + action[0], laser.get_y() + action[1]) for laser in lasers)
+        return points
+
+    def check_danger_enemies(self):
+        points = set()
+        hero_coords = self.get_hero()
+        #Check if zombies are anywhere near      
+        possible_zombies = ('FEMALE_ZOMBIE', 'FEMALE_ZOMBIE')
+        actions = ((-1,0), (1,0), (0,-1), (0,1), (0,0))
+
+        zombie_moves = set()
+        zombies = to_tuples(self._find_all(Element(possible_zombies[0]))) + to_tuples(self._find_all(Element(possible_zombies[1])))
+        for zombie in zombies:
+            for action in actions:
+                zombie_moves.add((zombie[0] + action[0], zombie[1] + action[1]))
+
+        player_moves = set()
+        for action in actions[:-1]:
+            player_moves.add((hero_coords[0] + action[0], hero_coords[1] + action[1]))
+            player_moves.add((hero_coords[0] + action[0]*2, hero_coords[1] + action[1]*2))
+            
+        points = player_moves & zombie_moves    
+
+        print(f"Z ATTAK: {points}")
+        return points    
 
     def get_hero(self):
         points = set()
@@ -86,7 +128,7 @@ class Board:
         points.update(self._find_all(Element('ROBO')))
         points.update(self._find_all(Element('ROBO_FLYING')))
         assert len(points) <= 1, "There should be only one robo"
-        return list(points)[0]
+        return list(points)[0].get_coord()
 
     def is_me_alive(self):
         points = set()
@@ -228,6 +270,8 @@ class Board:
 
         return _string_board
 
+def to_tuples(points):
+    return [point.get_coord() for point in points]
 
 if __name__ == '__main__':
     raise RuntimeError("This module is not designed to be ran from CLI")

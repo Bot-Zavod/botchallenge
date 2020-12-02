@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from typing import List, Set
+import timeit
 
 from board import Board
 from command import Command
@@ -26,10 +27,14 @@ class DirectionSolver:
 
     def get(self, board_string):
         self._board = Board(board_string)
+        start = timeit.timeit()
         self._jump_over = self._board.jump_over()
         self._non_barrier = self._board.non_barrier()
         self._board_size = self._board._layer_size - 1
-        return self.next_command()
+        move = self.next_command()
+        end = timeit.timeit()
+        print(f"The previous decision took {str(end - start)[:5]}s")
+        return move
 
     """ Implement your logic here """
     
@@ -49,6 +54,7 @@ class DirectionSolver:
             # where to jump if it is box or hole
             if node_position in jump_over:
                 node_position = (start[0] + new_position[0]*2, start[1] + new_position[1]*2)
+
                 
             # Make sure within range
             if (node_position[0] > size 
@@ -135,6 +141,8 @@ class DirectionSolver:
 
                 # Create the f, g, and h values
                 child.g = current_node.g + 1
+                if abs((current_node.position[0] - child.position[0]) + (current_node.position[1] - child.position[1])) > 1:
+                    child.g += 1
                 child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
                 child.f = child.g + child.h
 
@@ -178,7 +186,7 @@ class DirectionSolver:
             self.is_jumping = False
             cmd += "ACT(3),DOWN"
         else:
-            start = board.get_hero().get_coord()
+            start = board.get_hero()
             
             if not self.end:
                 end_points = board.get_exits()
@@ -196,10 +204,11 @@ class DirectionSolver:
                 print("New end: ", self.end)
             
             if (self.goal == "EXIT" and start != self.end) or (self.goal == "GOLD"):
-                if self.path_сhache:
-                    path = self.path_сhache
-                else:
-                    path = self._astar(start, self.end)
+                # if self.path_сhache:
+                #     path = self.path_сhache
+                # else:
+                #     path = self._astar(start, self.end)
+                path = self._astar(start, self.end)
                 print("path: ", path)
                 step = path[1]
                 
