@@ -28,7 +28,7 @@ _COMMANDS = dict(
     NULL=""
 )
 _COMMANDS = {v: k for k, v in _COMMANDS.items()}  # inverse dictionary for fast search
-print(_COMMANDS)
+# print(_COMMANDS)
 
 
 class Command:

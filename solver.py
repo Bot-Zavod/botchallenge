@@ -18,13 +18,15 @@ class DirectionSolver:
         
         self.is_jumping = False
         self.goal = "EXIT"
+        self.end = None
         
-        self.сhache = None
+        self.path_сhache = None
 
-        self.gp = GamepadRoboController()
+        # self.gp = GamepadRoboController()
 
     def get(self, board_string):
         self._board = Board(board_string)
+        self._jump_over = self._board.jump_over()
         self._non_barrier = self._board.non_barrier()
         self._board_size = self._board._layer_size - 1
         return self.next_command()
@@ -36,6 +38,7 @@ class DirectionSolver:
         
         size = self._board_size
         non_barrier = self._non_barrier
+        jump_over = self._jump_over
 
         neighbors = []
         for new_position in [(0, -1), (1, 0), (0, 1), (-1, 0)]: # Adjacent squares
@@ -43,15 +46,23 @@ class DirectionSolver:
             # Get node position
             node_position = (start[0] + new_position[0], start[1] + new_position[1])
 
+            # where to jump if it is box or hole
+            if node_position in jump_over:
+                node_position = (start[0] + new_position[0]*2, start[1] + new_position[1]*2)
+                
             # Make sure within range
             if (node_position[0] > size 
                     or node_position[0] < 0
                     or node_position[1] > size
                     or node_position[1] < 0):
                 continue
-
+            
             # Make sure walkable terrain
             if node_position not in non_barrier:
+                continue
+            
+            # Make sure no object on second layer
+            if node_position in jump_over:
                 continue
             
             neighbors.append(node_position)
@@ -159,41 +170,45 @@ class DirectionSolver:
         return None
 
     def next_command(self):
-        сhache = self.сhache
         board = self._board
         print(board.to_string())
         
         cmd = ''
         if self.is_jumping:
             self.is_jumping = False
-        elif False:
+            cmd += "ACT(3),DOWN"
+        else:
             start = board.get_hero().get_coord()
-            end_points = board.get_exits()
-            golds = board.get_golds()
             
-            if golds:
-                self.goal = "GOLD"
-                end_points = golds
+            if not self.end:
+                end_points = board.get_exits()
+                golds = board.get_golds()
             
-            if len(end_points) > 1:
-                end = self._bfs_nearest(start, end_points)
-            else:
-                end = end_points[0].get_coord()
-                
-            print("end: ", end)
+                self.goal = "EXIT"
+                if golds:
+                    self.goal = "GOLD"
+                    end_points = golds
             
-            if start != end:
-                if сhache:
-                    path = сhache
+                if len(end_points) > 1:
+                    self.end = self._bfs_nearest(start, end_points)
                 else:
-                    path = self._astar(start, end)
-                сhache = path[1:]
+                    self.end = end_points[0].get_coord()
+                print("New end: ", self.end)
+            
+            if (self.goal == "EXIT" and start != self.end) or (self.goal == "GOLD"):
+                if self.path_сhache:
+                    path = self.path_сhache
+                else:
+                    path = self._astar(start, self.end)
+                print("path: ", path)
+                step = path[1]
                 
-                # print("path: ", path)
-                step = сhache[0]
-                
-                if step == end:
-                    сhache == None
+                if step == self.end:
+                    self.end = None
+                    self.path_сhache = None
+                else:
+                    self.path_сhache = path[1:]
+                    
                 
                 if start[0] > step[0]:
                     cmd += 'LEFT'
@@ -204,10 +219,13 @@ class DirectionSolver:
                 elif start[1] < step[1]:
                     cmd += 'DOWN'
                     
-                if board.is_at(*step, Element('HOLE')):
+                if abs((start[0] - step[0]) + (start[1] - step[1])) > 1:
                     cmd = f"ACT(1),{cmd}"
                     self.is_jumping = True
-        cmd = self.gp.get_action_code()
+            else:
+                self.end = None  # new level starts
+                    
+        # cmd = self.gp.get_action_code()
         _command = Command(cmd)
         print("Sending Command: {}\n".format(_command.to_string()))
         return _command.get_command()

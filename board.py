@@ -63,12 +63,21 @@ class Board:
         points.update(self.get_starts())
         points.update(self.get_exits())
         points.update(self.get_golds())
-        points.update(self.get_holes())
+        # points.update(self.get_holes())
         # points.update(self.get_empty())        
         points.update(self.get_lasers())
         points.add(self.get_hero()) # single object
         points.update(self.get_other_heroes())
         return {point.get_coord() for point in points}
+    
+    def jump_over(self):
+        points = set()
+        points.update(self.get_holes())
+        points.update(self.get_boxes())
+        # points.update(self.get_other_heroes())
+        points.update(self.get_laser_machines())        
+        return {point.get_coord() for point in points}
+
 
     def get_hero(self):
         points = set()
