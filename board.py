@@ -3,9 +3,28 @@
 
 from math import sqrt
 from element import Element
-from point import Point
 import re
+from typing import Tuple
 
+class Node():
+    """A node class for A* Pathfinding"""
+
+    def __init__(self, parent=None, position=None):
+        self.parent = parent
+        self.position = position
+
+        self.g = 0
+        self.h = 0
+        self.f = 0
+
+    def __eq__(self, other):
+        return self.position == other.position
+    
+    def __str__(self):
+        return str(self.position)
+    
+    def __repr__(self):
+        return str(self.position)
 
 class Board:
     COUNT_LAYERS = 3
@@ -24,6 +43,9 @@ class Board:
             self._board.append(_layer)
         self._layer_size = int(sqrt(_layer_len))
 
+        self._jump_over = self.jump_over()
+        self._non_barrier = self.non_barrier()
+
     def _find_all(self, element):
         _points = []
         _a_char = element.get_char()
@@ -34,7 +56,7 @@ class Board:
         return _points
 
     def _strpos2pt(self, strpos):
-        return Point(*self._strpos2xy(strpos))
+        return tuple(self._strpos2xy(strpos))
 
     def _strpos2xy(self, strpos):
         return strpos % self._layer_size, strpos // self._layer_size
@@ -67,8 +89,7 @@ class Board:
         # points.update(self.get_empty())        
         points.update(self.get_lasers())
         points.update(self.get_other_heroes())
-        points = {point.get_coord() for point in points}
-        points.add(self.get_hero()) # single object
+        points.add(self.get_hero()) # single tuple
         return points
     
     def jump_over(self):
@@ -77,8 +98,6 @@ class Board:
         points.update(self.get_boxes())
         # points.update(self.get_other_heroes())
         points.update(self.get_laser_machines())
-
-        points = {point.get_coord() for point in points}
         lasers = self.check_lasers()
         if lasers:
             points.update(lasers)
@@ -95,7 +114,7 @@ class Board:
         for laser_dir, machine, action in zip(possible_lasers, charged_guns, actions):
             lasers = self._find_all(Element(laser_dir))
             lasers += self._find_all(Element(machine))
-            points.update((laser.get_x() + action[0], laser.get_y() + action[1]) for laser in lasers)
+            points.update((laser[0] + action[0], laser[1] + action[1]) for laser in lasers)
         return points
 
     def check_danger_enemies(self):
@@ -106,7 +125,7 @@ class Board:
         actions = ((-1,0), (1,0), (0,-1), (0,1), (0,0))
 
         zombie_moves = set()
-        zombies = to_tuples(self._find_all(Element(possible_zombies[0]))) + to_tuples(self._find_all(Element(possible_zombies[1])))
+        zombies = self._find_all(Element(possible_zombies[0])) + self._find_all(Element(possible_zombies[1]))
         for zombie in zombies:
             for action in actions:
                 zombie_moves.add((zombie[0] + action[0], zombie[1] + action[1]))
@@ -118,7 +137,6 @@ class Board:
             
         points = player_moves & zombie_moves    
 
-        print(f"Z ATTAK: {points}")
         return points    
 
     def get_hero(self):
@@ -128,13 +146,13 @@ class Board:
         points.update(self._find_all(Element('ROBO')))
         points.update(self._find_all(Element('ROBO_FLYING')))
         assert len(points) <= 1, "There should be only one robo"
-        return list(points)[0].get_coord()
+        return list(points)[0]
 
     def is_me_alive(self):
         points = set()
         points.update(self._find_all(Element('ROBO_FALLING')))
         points.update(self._find_all(Element('ROBO_LASER')))
-        return list(points) == 0
+        return len(points) == 0
 
     def get_other_heroes(self):
         points = set()
@@ -220,22 +238,22 @@ class Board:
         points.update(self._find_all(Element('UNLIMITED_FIRE_PERK')))
         return list(points)
 
-    def is_near(self, x, y, elem):
-        _is_near = False
-        if not Point(x, y).is_bad(self._layer_size):
-            _is_near = (self.is_at(x + 1, y, elem) or
-                        self.is_at(x - 1, y, elem) or
-                        self.is_at(x, 1 + y, elem) or
-                        self.is_at(x, 1 - y, elem))
-        return _is_near
+    # def is_near(self, x, y, elem):
+    #     _is_near = False
+    #     if not Point(x, y).is_bad(self._layer_size):
+    #         _is_near = (self.is_at(x + 1, y, elem) or
+    #                     self.is_at(x - 1, y, elem) or
+    #                     self.is_at(x, 1 + y, elem) or
+    #                     self.is_at(x, 1 - y, elem))
+    #     return _is_near
 
-    def count_near(self, x, y, elem):
-        _near_count = 0
-        if not Point(x, y).is_bad(self._layer_size):
-            for _x, _y in ((x + 1, y), (x - 1, y), (x, 1 + y), (x, 1 - y)):
-                if self.is_at(_x, _y, elem):
-                    _near_count += 1
-        return _near_count
+    # def count_near(self, x, y, elem):
+    #     _near_count = 0
+    #     if not Point(x, y).is_bad(self._layer_size):
+    #         for _x, _y in ((x + 1, y), (x - 1, y), (x, 1 + y), (x, 1 - y)):
+    #             if self.is_at(_x, _y, elem):
+    #                 _near_count += 1
+    #     return _near_count
 
     def to_string(self):
         return ("Board:\n{brd}\nHero at: {hero}\nOther Heroes "
@@ -269,9 +287,142 @@ class Board:
             _string_board += '\n'
 
         return _string_board
+  
+    #Pathfinding methods of the board
 
-def to_tuples(points):
-    return [point.get_coord() for point in points]
+    def bfs_nearest(self, start: tuple, end_points: list):
+        print(end_points)
+        """ return the nearest point to the start """
+        
+        visited = set() 
+        queue = [start]
+        
+        while queue:
+            node = queue.pop()
+            visited.add(node)
+            
+            neighbors = self._get_neighbors(node)
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    if neighbor in end_points:
+                        return neighbor
+                    queue.append(neighbor)
+        return None
+
+
+    def astar(self, start: tuple, end: tuple):
+            """Returns a list of tuples as a path from the given start to the given end in the given maze"""
+
+            # Create start and end node
+            start_node = Node(None, start)
+            start_node.g = start_node.h = start_node.f = 0
+            end_node = Node(None, end)
+            end_node.g = end_node.h = end_node.f = 0
+
+            # Initialize both open and closed list
+            open_list = []
+            closed_list = []
+
+            # Add the start node
+            open_list.append(start_node)
+
+            # Loop until you find the end
+            while len(open_list) > 0:
+                # print()
+                # print("open_list: ", open_list)
+                # print("closed_list: ", closed_list)
+
+                # Get the current node
+                current_node = open_list[0]
+                current_index = 0
+                for index, item in enumerate(open_list):
+                    if item.f < current_node.f:
+                        current_node = item
+                        current_index = index
+                # print("current_node: ", current_node.position)
+
+                # Pop current off open list, add to closed list
+                open_list.pop(current_index)
+                closed_list.append(current_node)
+
+                # Found the goal
+                if current_node == end_node:
+                    path = []
+                    current = current_node
+                    while current is not None:
+                        path.append(current.position)
+                        current = current.parent
+                    return path[::-1] # Return reversed path
+
+                neighbors = self._get_neighbors(current_node.position)
+                # Generate children
+                children = []
+                for neighbor in neighbors:
+                    new_node = Node(current_node, neighbor)  # Create new node
+                    children.append(new_node)  # Append
+
+                # Loop through children
+                for child in children:
+                    
+                    stop_itaration = False
+                    # Child is on the closed list
+                    for closed_child in closed_list:
+                        if child == closed_child:
+                            stop_itaration = True
+                            break
+                    if stop_itaration:
+                        continue
+
+                    # Create the f, g, and h values
+                    child.g = current_node.g + 1
+                    if abs((current_node.position[0] - child.position[0]) + (current_node.position[1] - child.position[1])) > 1:
+                        child.g += 1
+                    child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
+                    child.f = child.g + child.h
+
+                    # Child is already in the open list
+                    for open_node in open_list:
+                        if child == open_node and child.g > open_node.g:
+                            stop_itaration = True
+                            break
+                    if stop_itaration:
+                        continue
+
+                    # Add the child to the open list
+                    open_list.append(child)
+
+    def _get_neighbors(self, start: Tuple[int, int]):
+        """ return 4 Adjacent squares """
+
+        non_barrier = self._non_barrier
+        jump_over = self._jump_over
+
+        neighbors = []
+        for new_position in [(0, -1), (1, 0), (0, 1), (-1, 0)]: # Adjacent squares
+
+            # Get node position
+            node_position = (start[0] + new_position[0], start[1] + new_position[1])
+
+            # where to jump if it is box or hole
+            if node_position in jump_over:
+                node_position = (start[0] + new_position[0]*2, start[1] + new_position[1]*2)
+            
+            # Make sure walkable terrain
+            if node_position not in non_barrier:
+                continue
+            
+            # Make sure no object on second layer
+            if node_position in jump_over:
+                continue
+            
+            neighbors.append(node_position)
+        return neighbors
+
+def mht_dist(start: Tuple[int, int], end: Tuple[int, int]):
+    return ((end[0] - start[0]) ** 2) + ((end[1] - start[1]) ** 2)
+
 
 if __name__ == '__main__':
     raise RuntimeError("This module is not designed to be ran from CLI")
+
+
