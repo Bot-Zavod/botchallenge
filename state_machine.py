@@ -1,39 +1,61 @@
 from typing import Tuple, List
+from functools import wraps
+
 from board import Board, mht_dist
 
+
+def state_control(func):
+    """ check if function corresponds to the state """
+    
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        func_name = func.__name__
+        state_code = self.state_methods_names.index(func_name)
+        actual_state_code = self.stateStack[-1].code
+        if actual_state_code != state_code:
+            for name, code in self.states.items():
+                if code == actual_state_code:
+                    state_name = name
+            raise Exception(f"Trying to execute <{func_name}> in <{state_name}> state")
+        func(self, *args, **kwargs)
+    return wrapper
+
+
 class State():
-    def __init__(self, code: int):
-        self.code = code
+    def __init__(self, code: int, goal: Tuple[int,int] = None):
+        self.code = code  # BotStateMachine.states index
         #Priority states cannot be switched
         self.priority = False
         # State may or may not have a goal and planned path
         # e.g Walk to exit has one, dodge doesnt
-        self.stateGoal: Tuple[int:int] = None
-        self.plannedPath: List[tuple[int:int]] = None
+        self.stateGoal: Tuple[int, int] = goal
+        self.plannedPath: List[tuple[int, int]] = None
 
-    def pop_path_node(self, skip:Tuple[int, int] = None):
+    def pop_path_node(self, skip:Tuple[int, int] = None) -> Tuple[int, int]:
         if not self.plannedPath:
-            return None
+            raise "no plannedPath"
         next_node = self.plannedPath.pop(0)
         if next_node == skip:
             if not self.plannedPath:
-                return None
+                raise "no fearther plannedPath"
             next_node = self.plannedPath.pop(0)
         return next_node
 
-    def check_goal(self, check_coords):
+    def check_goal(self, check_coords:Tuple[int, int]) -> bool:
+        """ are we already on our target coordinate """
         return check_coords == self.stateGoal
 
-    def reset(self):
+    def reset(self) -> None:
         self.priority = False
         self.stateGoal = None
         self.plannedPath = None
 
-    def dropPath(self):
+    def dropPath(self) -> None:
         self.plannedPath = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"State #{self.code}" + f"Goal: {self.stateGoal}" if self.stateGoal else ''
+
 
 class BotStateMachine():
     # control variables
@@ -51,7 +73,15 @@ class BotStateMachine():
 
     def __init__(self, ):
         # Initialize state_methods
-        self.state_methods = (self._rebirth, self._exit, self._gold)
+        self.state_methods = (
+            self._rebirth,
+            self._exit,
+            self._gold,
+            self._active_hunt,
+            self._passive_hunt,
+            self._dodge
+        )
+        self.state_methods_names = list(func.__name__ for func in self.state_methods)
 
         # Initialize ❤️ base player state
         self.firingTimer = 0
@@ -59,7 +89,7 @@ class BotStateMachine():
         self.activeBonus=None
         self.bonusTerm=0
         #In state-goal stack states are stored with goals
-        self.stateStack: State = []
+        self.stateStack: List[State] = []
 
         #For a test, add a movement state to the stack
         self.stateStack.append(State(BotStateMachine.states["GOLD"]))
@@ -67,41 +97,41 @@ class BotStateMachine():
     def yield_decision(self, board:Board):
         #Get battlefield information
         self.board = board
-        self.hero = self.board.get_hero()
-            #Hero should have a state
+        self.hero = self.board._hero
+        self.exits = set(self.board.get_exits())
+        self.golds = set(self.board.get_golds())
+        self.actionspace = self.board.get_actionspace() # Returns possible and save actions
 
-        #Force rebirth if killed
+        # Force rebirth if killed
         if not self.board.is_me_alive():
             self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
 
-        #If we are in any legit state - act
+        self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
+        self._exit()
+        exit()
+        # Passive hunt
+        # if not self.stateStack[-1].priority:
+        #     self.stateStack.append(State(BotStateMachine.states["PASSIVE_HUNT"]))
+
         cmd = self.act_state()
    
-        #Passive hunt
-
-        # If it`s safe - act as planned
-
-        # If state is none - choose another one
-        # Make sure it`s safe
-        # If it`s unsafe - override
-        # If it`s unsafe - dodge
-
-        # cmd = self._exit()
         if not cmd:
             return ''
         return self._cmd_to_action(cmd)
-        # return self._cmd_to_action((10,10,3))
 
-    def act_state(self):
-        if self.stateStack:
-            return self.state_methods[self.stateStack[-1].code]()
-        else:
-            #TODO Implement a state searcher if out of all states, currently march to exits
+    def act_state(self) -> Tuple[int, int, int]:  # result of state decision
+        """ set state if none and return top state action """
+        
+        
+        if not self.stateStack:  # If state is None - choose another one
+            # TODO Implement a state searcher if out of all states, currently march to exits
             self.stateStack.append(State(BotStateMachine.states["EXIT"]))
-            return self.state_methods[self.stateStack[-1].code]()
-            print('Trying to act without an active state') 
+            
+        return self.state_methods[self.stateStack[-1].code]()
 
-    def _cmd_to_action(self, action:Tuple[int, int, int]):
+    def _cmd_to_action(self, action: Tuple[int, int, int]) -> str:
+        """ transforms coordinates and action code to server command """
+        
         cmd_dir = ''
         hero = self.hero
 
@@ -129,81 +159,109 @@ class BotStateMachine():
         hero = self.hero
         return abs(dest[0]-hero[0]) == 2 or abs(dest[1]-hero[1]) == 2
 
-    def _rebirth(self):
+    def _next_move_calculation(self, state: State) -> Tuple[int, int, int]:
+        """ check path and get next move """
+        
+        if not state.plannedPath:
+            state.plannedPath =  self.board.astar(self.hero, state.stateGoal)
+
+        next_node = state.pop_path_node(skip=self.hero)
+
+        if next_node:
+            if self._check_jump(next_node):
+                code = 1  # jump code
+            else:
+                code = -1  # ignore code for walk
+            next_move = (*next_node, code)
+        else:
+            raise "no next_node to use"
+        
+        # Make sure it`s safe
+        if next_move in self.actionspace:
+            return next_move  # If it`s safe - act as planned
+        else:
+            # If it`s unsafe - dodge
+            self.stateStack.append(State(BotStateMachine.states["DODGE"],
+                                         goal=state.stateGoal))
+            return self.act_state()
+
+
+
+    @state_control
+    def _rebirth(self) -> str:
+        # TODO check if we can kill anyone
         # Reset all stuff
         self.__init__()
         return ''
-
-    def _exit(self):
-        state = None
-        #Check if there is an exit command
-        if not self.stateStack[-1].code == BotStateMachine.states["EXIT"]:
-            print("Trying to execute wrong state (Exit)")
-        else:
-            state = self.stateStack[-1]
+    
+    @state_control
+    def _exit(self) -> Tuple[int, int, int]:
+        state = self.stateStack[-1]
         
         hero = self.hero
-        exits = set(self.board.get_exits())
+        exits = self.exits
 
         if exits:
 
-            if not state.stateGoal:
-                state.stateGoal = self.board.bfs_nearest(hero, exits)
-                #TODO Get out of this state if the exit is unreachable
+            if not state.stateGoal:  # check if we have goal
+                state.stateGoal = self.board.bfs_nearest(hero, exits)  # find nearest exit
+                if not state.stateGoal:  # no exit avaliable search another stuff
+                    self.stateStack.pop()
+                    return self.act_state()
 
             if state.check_goal(hero):
-                #If the exit is reached, rebirth
-                print("REBIRTH")
+                # If the exit is reached, rebirth
                 self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
                 return self.act_state()
 
-            if not state.plannedPath:
-                state.plannedPath =  self.board.astar(hero, state.stateGoal)
-
-            next_node = state.pop_path_node(skip = hero)
-
-            if next_node:
-                return ((*next_node, 1 if self._check_jump(next_node) else -1))
+            return self._next_move_calculation(state)
 
         else:
-            #Leave the state, if there`s no exits
+            # Leave the state, if there`s no exits
             self.stateStack.pop()
             return self.act_state()
 
-    def _gold(self):
-        state = None
-        #Check if there is LOOK for gold command
-        if not self.stateStack[-1].code == BotStateMachine.states["GOLD"]:
-            print("Trying to execute wrong state (Gold)")
-        else:
-            state = self.stateStack[-1]
+    @state_control
+    def _gold(self) -> Tuple[int, int, int]:
+        state = self.stateStack[-1]
 
         hero = self.hero
-        golds = set(self.board.get_golds())
+        golds = self.golds
         cmd = None
 
-        if golds: 
-            #This is called when we pick the gold we looked for, but there`s gold on the map elsewhre
+        if golds:
+            # TODO check if gold exists
+            # This is called when we pick the gold we looked for,
+            # but there`s gold on the map elsewhre
             if state.check_goal(hero):
                 state.reset()
 
             if not state.stateGoal:
                 state.stateGoal = self.board.bfs_nearest(hero, golds)
-                #TODO Get out of this state if no gold in reach unreachable
+                if not state.stateGoal:  # no golds avaliable search another stuff
+                    self.stateStack.pop()
+                    return self.act_state()
 
-            if not state.plannedPath:
-                state.plannedPath =  self.board.astar(hero, state.stateGoal)
-
-            next_node = state.pop_path_node(skip = hero)
-
-            if next_node:
-                return ((*next_node, 1 if self._check_jump(next_node) else -1))
+            return self._next_move_calculation(state)
         else:
             #Check for non state-exit stuff, e.g zombie on a gold bag
             self.stateStack.pop()
             return self.act_state()
-
-
-
-
-
+    
+    @state_control
+    def _dodge(self):
+        state = self.stateStack[-1]
+        state.stateGoal
+        self.actionspace
+        # TODO find safe path by manhattan
+        pass
+    
+    @state_control
+    def _passive_hunt(self):
+        # TODO check sanity of attack
+        pass
+    
+    @state_control
+    def _active_hunt(self):
+        # TODO kill anyone on this field
+        pass

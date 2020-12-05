@@ -19,6 +19,7 @@ class DirectionSolver:
     def get(self, board_string):
         start = time.time()
         current_board = Board(board_string)
+        print(current_board.to_string())
         next_cmd = self.FSM.yield_decision(current_board)
         end = time.time()
         print(f"Sending Command: {next_cmd}")
