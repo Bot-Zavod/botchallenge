@@ -20,19 +20,20 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         self._layer_size = int(sqrt(len(board_json["layers"][0])))
         self._board = [list(layer) for layer in board_json["layers"]]
         self.levelFinished = board_json["levelFinished"]
-        # self._hero = (board_json["heroPosition"]["x"], board_json["heroPosition"]["y"]) # gives error coordinates
-        
-        
+        # gives error coordinates
+        # self._hero = (board_json["heroPosition"]["x"],
+        #               board_json["heroPosition"]["y"])
+
         # reusable info
         self._hero = self.get_hero()
-        self.directions = ((-1,0), (1,0), (0,-1), (0,1), (0,0))
+        self.directions = ((-1, 0), (1, 0), (0, -1), (0, 1), (0, 0))
         self._jump_over = self.jump_over()
         self._non_barrier = self.non_barrier()
         self.golds = set(self.get_golds())
         self.exits = set(self.get_exits())
         self.nearest_gold = self.bfs_nearest(self._hero, self.golds)
         self.nearest_exit = self.bfs_nearest(self._hero, self.exits)
-        
+
         self.first_lasers = self.check_first_lasers()
 
     def _find_all(self, element: Element) -> List[Tuple[int, int]]:
@@ -54,38 +55,41 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         return self._layer_size * y + x
 
     def to_string(self):
-        return ("Board:\n{brd}\nHero at: {hero}\nOther Heroes "
-                "at: {others}\nZombies at: {zmb}\nLasers at:"
-                " {lsr}\nHoles at : {hls}\nGolds at: "
-                "{gld}\nPerks at: {prk}".format(brd=self._line_by_line(),
-                                                  hero=self.get_hero(),
-                                                  others=self.get_other_heroes(),
-                                                  zmb=self.get_zombies(),
-                                                  lsr=self.get_lasers(),
-                                                  hls=self.get_holes(),
-                                                  gld=self.get_golds(),
-                                                  prk=self.get_perks())
-                )
+        return (
+            "Board:\n{brd}\nHero at: {hero}\nOther Heroes "
+            "at: {others}\nZombies at: {zmb}\nLasers at:"
+            " {lsr}\nHoles at : {hls}\nGolds at: "
+            "{gld}\nPerks at: {prk}".format(
+                brd=self._line_by_line(),
+                hero=self.get_hero(),
+                others=self.get_other_heroes(),
+                zmb=self.get_zombies(),
+                lsr=self.get_lasers(),
+                hls=self.get_holes(),
+                gld=self.get_golds(),
+                prk=self.get_perks(),
+            )
+        )
 
     def _line_by_line(self):
-        _string_board = '  '
+        _string_board = "  "
         for i in range(self._layer_size * Board.COUNT_LAYERS):
             _string_board += str(i % 10)
             if (i + 1) % self._layer_size == 0:
-                _string_board += '\t'
+                _string_board += "\t"
 
-        _string_board += '\n'
+        _string_board += "\n"
 
         for i in range(self._layer_size):
-            _string_board += str(i % 10) + ' '
+            _string_board += str(i % 10) + " "
             for j in range(Board.COUNT_LAYERS):
                 for k in range(self._layer_size):
                     _string_board += self._board[j][k + (i * self._layer_size)]
-                _string_board += '\t'
-            _string_board += '\n'
+                _string_board += "\t"
+            _string_board += "\n"
 
         return _string_board
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise RuntimeError("This module is not designed to be ran from CLI")

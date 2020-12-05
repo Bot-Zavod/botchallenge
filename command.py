@@ -27,7 +27,8 @@ _COMMANDS = dict(
 
     NULL=""
 )
-_COMMANDS = {v: k for k, v in _COMMANDS.items()}  # inverse dictionary for fast search
+# inverse dictionary for fast search
+_COMMANDS = {v: k for k, v in _COMMANDS.items()}
 # print(_COMMANDS)
 
 

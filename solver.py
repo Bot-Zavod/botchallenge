@@ -9,11 +9,12 @@ from element import Element
 
 from gamepad import GamepadRoboController
 
-""" This class should contain the movement generation algorithm."""
+
 class DirectionSolver:
+    """ This class should contain the movement generation algorithm."""
 
     def __init__(self):  # initializes on websocket start
-        #Place configuration paramters here
+        # Place configuration paramters here
         self.FSM = BotStateMachine()
 
     def get(self, board_string):
@@ -25,6 +26,7 @@ class DirectionSolver:
         print(f"Sending Command: {next_cmd}")
         print(f"The previous decision took {round(end - start, 3)}s")
         return next_cmd
+
 
 if __name__ == '__main__':
     raise RuntimeError("This module is not intended to be ran from CLI")
