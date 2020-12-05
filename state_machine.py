@@ -1,7 +1,9 @@
 from typing import Tuple, List
 from functools import wraps
 
-from board import Board, mht_dist
+import requests
+
+from board import Board
 
 
 def state_control(func):
@@ -16,12 +18,14 @@ def state_control(func):
             for name, code in self.states.items():
                 if code == actual_state_code:
                     state_name = name
-            raise Exception(f"Trying to execute <{func_name}> in <{state_name}> state")
-        func(self, *args, **kwargs)
+            raise Exception(f"Trying to run <{func_name}> in <{state_name}> state")
+        return func(self, *args, **kwargs)
     return wrapper
 
 
 class State():
+    """ defines our action based on our goal """
+    
     def __init__(self, code: int, goal: Tuple[int,int] = None):
         self.code = code  # BotStateMachine.states index
         #Priority states cannot be switched
@@ -31,13 +35,15 @@ class State():
         self.stateGoal: Tuple[int, int] = goal
         self.plannedPath: List[tuple[int, int]] = None
 
-    def pop_path_node(self, skip:Tuple[int, int] = None) -> Tuple[int, int]:
+    def pop_path_node(self, hero:Tuple[int, int]=None) -> Tuple[int, int]:
+        """ return next step of our path in case we are not standing there """
+        
         if not self.plannedPath:
-            raise "no plannedPath"
+            raise Exception("no plannedPath in pop_path_node")
         next_node = self.plannedPath.pop(0)
-        if next_node == skip:
+        if next_node == hero:
             if not self.plannedPath:
-                raise "no fearther plannedPath"
+                raise Exception("no fearther plannedPath after next_node")
             next_node = self.plannedPath.pop(0)
         return next_node
 
@@ -46,6 +52,8 @@ class State():
         return check_coords == self.stateGoal
 
     def reset(self) -> None:
+        """ reset target state data """
+        
         self.priority = False
         self.stateGoal = None
         self.plannedPath = None
@@ -55,12 +63,32 @@ class State():
 
     def __str__(self) -> str:
         return f"State #{self.code}" + f"Goal: {self.stateGoal}" if self.stateGoal else ''
+    
+    def __repr__(self) -> str:
+        return BotStateMachine.state_names[self.code]
+        
 
 
 class BotStateMachine():
     # control variables
-    shotRecoil = 3
-
+    url = "https://epam-botchallenge.com/codenjoy-balancer/rest/game/settings/get"
+    controls = requests.get(url).json()[0]
+    perkAvailability  = controls["perkAvailability"]
+    gunRecharge       = controls["gunRecharge"]
+    deathRayRange     = controls["deathRayRange"]
+    gunShotQueue      = controls["gunShotQueue"]
+    gunRestTime       = controls["gunRestTime"]
+    roomSize          = controls["roomSize"]
+    loosePenalty      = controls["loosePenalty"]
+    killHeroScore     = controls["killHeroScore"]
+    killZombieScore   = controls["killZombieScore"]
+    goldScore         = controls["goldScore"]
+    winScore          = controls["winScore"]
+    trainingMode      = controls["trainingMode"]
+    enableKillScore   = controls["enableKillScore"]
+    perkDropRatio     = controls["perkDropRatio"]
+    perkActivity      = controls["perkActivity"]
+    
     # DEATH - Resets all 
     states = {
         "REBIRTH":0,
@@ -70,6 +98,7 @@ class BotStateMachine():
         "PASSIVE_HUNT":4,
         "DODGE":5,
     }
+    state_names = {value: key for key, value in states.items()}
 
     def __init__(self, ):
         # Initialize state_methods
@@ -81,6 +110,7 @@ class BotStateMachine():
             self._passive_hunt,
             self._dodge
         )
+        # required for state_control decorator
         self.state_methods_names = list(func.__name__ for func in self.state_methods)
 
         # Initialize ❤️ base player state
@@ -91,52 +121,49 @@ class BotStateMachine():
         #In state-goal stack states are stored with goals
         self.stateStack: List[State] = []
 
-        #For a test, add a movement state to the stack
-        self.stateStack.append(State(BotStateMachine.states["GOLD"]))
-
     def yield_decision(self, board:Board):
         #Get battlefield information
         self.board = board
         self.hero = self.board._hero
-        self.exits = set(self.board.get_exits())
-        self.golds = set(self.board.get_golds())
+        self.exits = self.board.exits
+        self.golds = self.board.golds
         self.actionspace = self.board.get_actionspace() # Returns possible and save actions
-
-        # Force rebirth if killed
+        
+        # rebirth if killed
         if not self.board.is_me_alive():
             self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
 
-        self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
-        self._exit()
-        exit()
-        # Passive hunt
+        # passive hunt if possible to kill someone
         # if not self.stateStack[-1].priority:
         #     self.stateStack.append(State(BotStateMachine.states["PASSIVE_HUNT"]))
+        
+        next_move = self.act_state()
+        
+        print("state Stack: ", self.stateStack)
+        cmd = self._cmd_to_action(next_move)
+        return cmd
 
-        cmd = self.act_state()
-   
-        if not cmd:
-            return ''
-        return self._cmd_to_action(cmd)
-
-    def act_state(self) -> Tuple[int, int, int]:  # result of state decision
+    def act_state(self) -> Tuple[int, int, int]:
         """ set state if none and return top state action """
         
-        
         if not self.stateStack:  # If state is None - choose another one
-            # TODO Implement a state searcher if out of all states, currently march to exits
-            self.stateStack.append(State(BotStateMachine.states["EXIT"]))
+            if self.board.nearest_gold: # if no golds avaliable search another stuff
+                self.stateStack.append(State(BotStateMachine.states["GOLD"]))
+            elif self.board.nearest_exit:
+                self.stateStack.append(State(BotStateMachine.states["EXIT"]))
             
         return self.state_methods[self.stateStack[-1].code]()
 
     def _cmd_to_action(self, action: Tuple[int, int, int]) -> str:
         """ transforms coordinates and action code to server command """
+        if not action:
+            return ''
         
         cmd_dir = ''
         hero = self.hero
 
         #Jump on my place
-        if action[2] == 1 and action[0] == hero[0] and action[1] == hero[1]:
+        if action[:2] == hero[:2] and action[2] == 1:
             return 'ACT(1)'
 
         if hero[0] > action[0]:
@@ -165,7 +192,7 @@ class BotStateMachine():
         if not state.plannedPath:
             state.plannedPath =  self.board.astar(self.hero, state.stateGoal)
 
-        next_node = state.pop_path_node(skip=self.hero)
+        next_node = state.pop_path_node(hero=self.hero)
 
         if next_node:
             if self._check_jump(next_node):
@@ -174,10 +201,10 @@ class BotStateMachine():
                 code = -1  # ignore code for walk
             next_move = (*next_node, code)
         else:
-            raise "no next_node to use"
+            raise Exception("no next_node to use")
         
         # Make sure it`s safe
-        if next_move in self.actionspace:
+        if next_node in self.actionspace:
             return next_move  # If it`s safe - act as planned
         else:
             # If it`s unsafe - dodge
@@ -186,75 +213,90 @@ class BotStateMachine():
             return self.act_state()
 
 
-
+    ####################################
+    ######### STATES FUNCTIONS #########
+    ####################################
+    
+    
     @state_control
-    def _rebirth(self) -> str:
+    def _rebirth(self) -> tuple:
         # TODO check if we can kill anyone
         # Reset all stuff
         self.__init__()
-        return ''
+        return ()
     
     @state_control
     def _exit(self) -> Tuple[int, int, int]:
+        """ searching for exit """
+        
         state = self.stateStack[-1]
         
         hero = self.hero
         exits = self.exits
 
-        if exits:
-
-            if not state.stateGoal:  # check if we have goal
-                state.stateGoal = self.board.bfs_nearest(hero, exits)  # find nearest exit
-                if not state.stateGoal:  # no exit avaliable search another stuff
-                    self.stateStack.pop()
-                    return self.act_state()
-
+        if not exits:
+            # Leave the state, if there`s no exits
+            self.stateStack.pop()
+            return self.act_state()
+        else:
             if state.check_goal(hero):
                 # If the exit is reached, rebirth
                 self.stateStack.append(State(BotStateMachine.states["REBIRTH"]))
                 return self.act_state()
+            
+            if not state.stateGoal:  # check if we have goal
+                state.stateGoal = self.board.bfs_nearest(hero, exits)  # find nearest exit
+                if not state.stateGoal:  # no exit avaliable
+                    self.stateStack.pop()
+                    return self.act_state()
 
             return self._next_move_calculation(state)
 
-        else:
-            # Leave the state, if there`s no exits
-            self.stateStack.pop()
-            return self.act_state()
-
     @state_control
     def _gold(self) -> Tuple[int, int, int]:
+        """ searching for gold """
+        
         state = self.stateStack[-1]
 
         hero = self.hero
-        golds = self.golds
-        cmd = None
 
-        if golds:
+        if not self.board.nearest_gold:
+            self.stateStack.pop()
+            return self.act_state()
+        else:
             # TODO check if gold exists
+            
             # This is called when we pick the gold we looked for,
             # but there`s gold on the map elsewhre
             if state.check_goal(hero):
                 state.reset()
 
-            if not state.stateGoal:
-                state.stateGoal = self.board.bfs_nearest(hero, golds)
-                if not state.stateGoal:  # no golds avaliable search another stuff
-                    self.stateStack.pop()
-                    return self.act_state()
+            state.stateGoal = self.board.nearest_gold
 
             return self._next_move_calculation(state)
-        else:
-            #Check for non state-exit stuff, e.g zombie on a gold bag
-            self.stateStack.pop()
-            return self.act_state()
     
     @state_control
     def _dodge(self):
+        """ find action nearest to target by manhetan distance """
+        
         state = self.stateStack[-1]
-        state.stateGoal
-        self.actionspace
-        # TODO find safe path by manhattan
-        pass
+        target = state.stateGoal
+        state.dropPath()
+        
+        lowest_dist = float("inf")
+        optimal_move = None
+        for action in self.actionspace:
+            dist = self.board._mht_dist(action, target)
+            if dist < lowest_dist:
+                lowest_dist = dist
+                optimal_move = action
+
+        if self._check_jump(optimal_move):
+            code = 1  # jump code
+        else:
+            code = -1  # ignore code for walk
+        self.stateStack.pop()
+        return (*optimal_move, code)
     
     @state_control
     def _passive_hunt(self):

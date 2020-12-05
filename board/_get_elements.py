@@ -4,6 +4,9 @@ from element import Element
 
 class Mixin:
     
+    def is_at(self, x, y, element_object: Element):
+        return element_object in self.get_at(x, y)
+    
     def get_at(self, x: int, y: int) -> List[Element]:
         """ Element on 3 layers of board """
         
@@ -71,8 +74,6 @@ class Mixin:
     def get_holes(self):
         points = set()
         points.update(self._find_all(Element('HOLE')))
-        points.update(self._find_all(Element('ROBO_FALLING')))
-        points.update(self._find_all(Element('ROBO_OTHER_FALLING')))
         return list(points)
 
     def get_exits(self):
@@ -80,9 +81,12 @@ class Mixin:
 
     def get_starts(self):
         return self._find_all(Element('START'))
+    
+    def get_zombie_starts(self):
+        return self._find_all(Element('ZOMBIE_START'))
 
     def get_golds(self):
-        return self._find_all(Element('GOLD'))
+        return set(self._find_all(Element('GOLD')))
 
     def get_walls(self):
         points = set()

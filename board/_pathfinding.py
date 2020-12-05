@@ -130,9 +130,10 @@ class Mixin:
 
         non_barrier = self._non_barrier
         jump_over = self._jump_over
+        directions = self.directions[:-1]
 
         neighbors = []
-        for new_position in [(0, -1), (1, 0), (0, 1), (-1, 0)]: # Adjacent squares
+        for new_position in directions: # Adjacent squares
 
             # Get node position
             node_position = (start[0] + new_position[0], start[1] + new_position[1])
@@ -152,6 +153,5 @@ class Mixin:
             neighbors.append(node_position)
         return neighbors
 
-
-def mht_dist(start: Tuple[int, int], end: Tuple[int, int]):
-    return ((end[0] - start[0]) ** 2) + ((end[1] - start[1]) ** 2)
+    def _mht_dist(self, start: Tuple[int, int], end: Tuple[int, int]):
+        return ((end[0] - start[0]) ** 2) + ((end[1] - start[1]) ** 2)
