@@ -28,8 +28,6 @@ def state_control(func):
 class State:
     """ defines our action based on our goal """
 
-    # TODO func to recalculate stateGoal and plannedPath based on board shift
-
     def __init__(self, code: int, goal: Tuple[int, int] = None):
         self.code = code  # BotStateMachine.states index
         # Priority states cannot be switched
@@ -144,8 +142,6 @@ class BotStateMachine:
         self.shift_direction: Tuple[int, int] = None
 
     def yield_decision(self, board_string: str) -> str:
-        # TODO save previous bourd and calculate shift
-
         # update board
         board_shifted = self.board.update_board(board_string,
                                                 self.shift_direction)
