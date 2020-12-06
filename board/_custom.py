@@ -1,6 +1,8 @@
 from typing import Tuple, List, Set
 from element import Element
 
+from board._element_groups import _ELEMENT_GROUPS
+
 
 class Mixin:
 
@@ -21,6 +23,10 @@ class Mixin:
 
     def get_actionspace(self) -> Set[Tuple[int, int]]:
         """ Returns possible and save actions """
+
+        # TODO should work with action beacause stat on place and jump
+        # have the same coordinate but dufferent timing
+        # + we can jump to wall, to stay in air and finish no neighbour cell
 
         directions = self.directions
         hero = self._hero
@@ -47,29 +53,22 @@ class Mixin:
 
     def non_barrier(self):
         # returns set of non barrier coordinates
-        points = set()
-        points.update(self.get_floors())
-        points.update(self.get_starts())
-        points.update(self.get_zombie_starts())
-        points.update(self.get_exits())
-        points.update(self.get_golds())
+        elements = _ELEMENT_GROUPS["WALKABLE"]
+        points = self._find_all([Element(el) for el in elements])
         return points
 
     def second_layer_barrier(self):
-        points = set()
-        points.update(self.get_laser_machines())
-        points.update(self.get_boxes())
+        """ objects on second layer that stop lasers """
+
+        elements = _ELEMENT_GROUPS["LASER_MACHINES"] + ["BOX"]
+        points = self._find_all([Element(el) for el in elements])
         return points
 
     def jump_over(self):
-        points = set()
-        points.update(self.get_holes())
-        points.update(self.second_layer_barrier())
-        # lasers = self.check_first_lasers()
-        # lasers = lasers[0] + lasers[1] + lasers[2] + lasers[3]
-        # if lasers:
-        #     points.update(set(lasers))
-        # points.update(self.check_danger_enemies())
+        """ object hero can jump over """
+
+        elements = _ELEMENT_GROUPS["LASER_MACHINES"] + ["BOX", "HOLE"]
+        points = self._find_all([Element(el) for el in elements])
         return points
 
     def check_first_lasers(self) -> List[Set[Tuple[int, int]]]:
@@ -89,9 +88,7 @@ class Mixin:
         for i, laser_dir, machine, action in zip(
             range(3), possible_lasers, charged_guns, directions
         ):
-            lasers = self._find_all(Element(laser_dir)) + self._find_all(
-                Element(machine)
-            )
+            lasers = self._find_all([Element(laser_dir), Element(machine)])
             points[i] = [(laser[0] + action[0],
                           laser[1] + action[1]) for laser in lasers]
         return points
@@ -112,15 +109,14 @@ class Mixin:
         return second_lasers
 
     def check_danger_enemies(self):
-        points = set()
         hero_coords = self.get_hero()
         # Check if zombies are anywhere near
-        possible_zombies = ("FEMALE_ZOMBIE", "FEMALE_ZOMBIE")
-        directions = self.directions
 
+        elements = _ELEMENT_GROUPS["ZOMBIE"]
+        points = self._find_all([Element(el) for el in elements])
+
+        directions = self.directions
         zombie_moves = set()
-        zombies = self._find_all(Element(possible_zombies[0]))
-        zombies += self._find_all(Element(possible_zombies[1]))
         for zombie in zombies:
             for action in directions:
                 zombie_moves.add((zombie[0] + action[0],
@@ -138,7 +134,6 @@ class Mixin:
         return points
 
     def is_me_alive(self) -> bool:
-        points = set()
-        points.update(self._find_all(Element("ROBO_FALLING")))
-        points.update(self._find_all(Element("ROBO_LASER")))
+        elements = _ELEMENT_GROUPS["ROBO_DEAD"]
+        points = self._find_all([Element(el) for el in elements])
         return len(points) == 0

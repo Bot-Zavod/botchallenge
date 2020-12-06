@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-from typing import List, Set
+
 import time
 
 from state_machine import BotStateMachine
-from board import Board
-from command import Command
-from element import Element
-
 from gamepad import GamepadRoboController
 
 
@@ -17,14 +13,11 @@ class DirectionSolver:
         # Place configuration paramters here
         self.FSM = BotStateMachine()
 
-    def get(self, board_string):
+    def get(self, board_string: str) -> str:
         start = time.time()
-        current_board = Board(board_string)
-        print(current_board.to_string(), "\n")
-        next_cmd = self.FSM.yield_decision(current_board)
+        next_cmd = self.FSM.yield_decision(board_string)
         end = time.time()
-        print(f"Sending Command: {next_cmd}")
-        print(f"The previous decision took {round(end - start, 3)}s")
+        print(f"The previous decision took {round(end - start, 3)}s\n\n")
         return next_cmd
 
 

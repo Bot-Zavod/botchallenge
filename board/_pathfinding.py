@@ -26,10 +26,11 @@ class Node:
 
 class Mixin:
     def bfs_nearest(
-        self, start: Tuple[int, int], end_points: Set[Tuple[int, int]]
+        self, start: Tuple[int, int], end_points: List[Tuple[int, int]]
     ) -> Tuple[int, int]:
         """ return the nearest point to the start """
 
+        end_points = set(end_points)
         visited = set()
         queue = [start]
 
@@ -115,17 +116,11 @@ class Mixin:
 
                 # Create the f, g, and h values
                 child.g = current_node.g + 1
-                if (
-                    abs(
-                        (current_node.position[0] - child.position[0])
-                        + (current_node.position[1] - child.position[1])
-                    )
-                    > 1
-                ):
+                if (abs((current_node.position[0] - child.position[0])
+                        + (current_node.position[1] - child.position[1])) > 1):
                     child.g += 1
-                child.h = ((child.position[0] - end_node.position[0]) ** 2) + (
-                    (child.position[1] - end_node.position[1]) ** 2
-                )
+
+                child.h = self._mht_dist(child.position, end_node.position)
                 child.f = child.g + child.h
 
                 # Child is already in the open list

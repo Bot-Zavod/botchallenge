@@ -99,24 +99,26 @@ def layer3():
 
 class Element:
 
-    def __init__(self, name):
-        for key, value in _ELEMENTS.items():
-            if name == key or name == value[1]:
-                self._name = key
-                self._layer = value[0]
-                self._char = value[1]
-                break
+    def __init__(self, name: str):
+        if name in _ELEMENTS:
+            self._name = name
+            self._layer = _ELEMENTS[name][0]
+            self._char = _ELEMENTS[name][1]
         else:
             raise ArgumentError("No such Element: {}".format(name))
 
     def get_name(self):
         return self._name
 
-    def get_layer(self):
-        return self._layer
+    def get_layer(self) -> int:
+        """ layer number in board matrix """
+        return int(self._layer[-1]) - 1
 
     def get_char(self):
         return self._char
+
+    def __str__(self):
+        return f"{self._name} {self._layer} {self._char}"
 
     def __eq__(self, other):
         return (self._name == other._name and

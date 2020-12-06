@@ -1,11 +1,12 @@
 #! /usr/bin/env python3
 
-from math import sqrt
-from element import Element
-import json
-import re
-
 from typing import Tuple, List, Set
+
+import json
+from math import sqrt
+import copy
+
+from element import Element
 
 import board._pathfinding
 import board._get_elements
@@ -15,34 +16,71 @@ import board._custom
 class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
     COUNT_LAYERS = 3
 
-    def __init__(self, input):
-        board_json = json.loads(input)
+    def __init__(self):
+        self.previous_board: Board = None  # previous board object
+        self._board: List[List[str]] = None  # board matrix
+        self._board_hash: int = None  # first string hash
+
+    def update_board(
+        self, board_string: str, shift_direction: Tuple[int, int] = None
+    ) -> bool:
+        """ build board and prepare all data """
+
+        # makes previous board independent for changes
+        if self._board:
+            # drop previous copy to avoid object linked list
+            self.previous_board = None
+            self.previous_board = copy.deepcopy(self)
+
+        # extracting info from server massage
+        board_json = json.loads(board_string)
+        self._board_hash = hash(board_json["layers"][0][:40])
+        self.levelFinished = board_json["levelFinished"]
         self._layer_size = int(sqrt(len(board_json["layers"][0])))
         self._board = [list(layer) for layer in board_json["layers"]]
-        self.levelFinished = board_json["levelFinished"]
-        # gives error coordinates
-        # self._hero = (board_json["heroPosition"]["x"],
-        #               board_json["heroPosition"]["y"])
+
+        # if board shifted save bool and shift modifier
+        if self.previous_board and (
+            self.previous_board._board_hash != self._board_hash
+        ):
+            self.shifted = True
+            # direction of last player move
+            self.shift_direction = shift_direction
+        else:
+            self.shifted = False
 
         # reusable info
         self._hero = self.get_hero()
         self.directions = ((-1, 0), (1, 0), (0, -1), (0, 1), (0, 0))
         self._jump_over = self.jump_over()
         self._non_barrier = self.non_barrier()
-        self.golds = set(self.get_golds())
-        self.exits = set(self.get_exits())
+        self.golds = self.get_golds()
+        self.exits = self.get_exits()
         self.nearest_gold = self.bfs_nearest(self._hero, self.golds)
         self.nearest_exit = self.bfs_nearest(self._hero, self.exits)
-
         self.first_lasers = self.check_first_lasers()
 
-    def _find_all(self, element: Element) -> List[Tuple[int, int]]:
+        return self.shifted
+
+    def _find_all(self, elements: List[Element]) -> List[Tuple[int, int]]:
         _points = []
-        _a_char = element.get_char()
-        for i in range(len(self._board)):
-            for j in range(len(self._board[i])):
-                if self._board[i][j] == _a_char:
-                    _points.append(self._strpos2pt(j))
+
+        # group element by layers
+        element_layers = {}
+        for element in elements:
+            _a_char = element.get_char()
+            _layer = element.get_layer()
+            if _layer in element_layers:
+                element_layers[_layer].add(_a_char)
+            else:
+                element_layers[_layer] = set(_a_char)
+
+        # search elemnt group in cpecific layer
+        for layer in element_layers:
+            search_elements = element_layers[layer]
+            for i in range(len(self._board[layer])):
+                if self._board[layer][i] in search_elements:
+                    _points.append(self._strpos2pt(i))
         return _points
 
     def _strpos2pt(self, strpos):
