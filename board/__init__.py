@@ -34,7 +34,17 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
 
         # extracting info from server massage
         board_json = json.loads(board_string)
-        self._board_hash = hash(board_json["layers"][0][:40])
+
+        hash_str = board_json["layers"][0][:60]
+        translation = {  # dynamic elements of static board
+            "◄": "˂",
+            "►": "˃",
+            "▲": "˄",
+            "▼": "˅",
+            "$": ".",
+        }
+        self._board_hash = hash(hash_str.translate(translation))
+
         self.levelFinished = board_json["levelFinished"]
         self._layer_size = int(sqrt(len(board_json["layers"][0])))
         self._board = [list(layer) for layer in board_json["layers"]]

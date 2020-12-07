@@ -151,8 +151,9 @@ class BotStateMachine:
             self.shift_stack()
         print(self.board.to_string(), "\n")
 
-        print("previous_board:\t", self.board.previous_board)
-        print("current_board:\t", self.board)
+        if self.board.previous_board:
+            print("previous_board:\t", self.board.previous_board._board_hash)
+        print("current_board:\t", self.board._board_hash)
 
         # Get battlefield information
         self.hero = self.board._hero
@@ -206,8 +207,7 @@ class BotStateMachine:
         for state in self.stateStack:
             state.shift_coord(self.shift_direction)
 
-    def _cmd_to_action(
-        self, action: Tuple[int, int, int]
+    def _cmd_to_action(self, action: Tuple[int, int, int]
     ) -> Tuple[str, Tuple[int, int]]:
         """ transforms coordinates and action code to server command """
 
@@ -241,7 +241,8 @@ class BotStateMachine:
 
         if cmd_code == 3:
             shift = (0, 0)
-
+        # bord shift is in opposite direction then player move
+        shift = (shift[1], shift[0])
         return cmd_prefix + cmd_dir, shift
 
     def _check_jump(self, dest: Tuple[int, int]) -> bool:
