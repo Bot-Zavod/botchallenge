@@ -29,6 +29,7 @@ class State:
     """ defines our action based on our goal """
 
     def __init__(self, code: int, goal: Tuple[int, int] = None):
+        # maybe pass LAMDA in conditions
         self.code = code  # BotStateMachine.states index
         # Priority states cannot be switched
         self.priority = False
@@ -60,9 +61,9 @@ class State:
                 self.plannedPath[i] = (cell[0] + shift[0],
                                        cell[1] + shift[1])
 
-    def check_goal(self, check_coords: Tuple[int, int]) -> bool:
-        """ are we already on our target coordinate """
-        return check_coords == self.stateGoal
+    def check_goal(self, hero: Tuple[int, int]) -> bool:
+        """ if are we already on our target coordinate """
+        return hero == self.stateGoal
 
     def reset(self) -> None:
         """ reset target state data """
@@ -109,6 +110,9 @@ class BotStateMachine:
         "ACTIVE_HUNT": 3,
         "PASSIVE_HUNT": 4,
         "DODGE": 5,
+        "JUMP": 6,
+        "LOOT": 7,
+        "EXPLORE": 8,
     }
     # for __repr__ State
     state_names = {value: key for key, value in states.items()}
@@ -122,6 +126,9 @@ class BotStateMachine:
             self._active_hunt,
             self._passive_hunt,
             self._dodge,
+            self._jump,
+            self._loot,
+            self._explore,
         )
         # required for state_control decorator
         self.state_methods_names = list(func.__name__ for func in self.state_methods)
@@ -152,22 +159,24 @@ class BotStateMachine:
         print(self.board.to_string(), "\n")
 
         if self.board.previous_board:
-            print("previous_board:\t", self.board.previous_board._board_hash)
-        print("current_board:\t", self.board._board_hash)
+            print("board shifted:\t", self.board.board_shifted)
 
         # Get battlefield information
         self.hero = self.board._hero
-        self.exits = self.board.exits
-        self.golds = self.board.golds
         self.actionspace = self.board.get_actionspace()
 
         # rebirth if killed
         if not self.board.is_me_alive():
             self.append_stack("REBIRTH")
 
+        # do nothing if jumping
+        if self.board.is_me_jumping():
+            self.append_stack("JUMP")
+
         # passive hunt if possible to kill someone
-        # if not self.stateStack[-1].priority:
-        #     self.append_stack("PASSIVE_HUNT")
+        if self.board._targets:
+            print(self.board._targets)
+            self.append_stack("PASSIVE_HUNT")
 
         next_move = self.act_state()
 
@@ -192,6 +201,10 @@ class BotStateMachine:
                 self.append_stack("GOLD")
             elif self.board.nearest_exit:
                 self.append_stack("EXIT")
+            elif self.board.nearest_dead_player:
+                self.append_stack("LOOT")
+            elif self.board.nearest_transition:
+                self.append_stack("EXPLORE")
 
         return self.state_methods[self.stateStack[-1].code]()
 
@@ -210,7 +223,7 @@ class BotStateMachine:
     def _cmd_to_action(self, action: Tuple[int, int, int]
     ) -> Tuple[str, Tuple[int, int]]:
         """ transforms coordinates and action code to server command """
-
+        print("action: ", action)
         if not action:
             return "", (0, 0)
 
@@ -218,8 +231,11 @@ class BotStateMachine:
         hero = self.hero
 
         # Jump on my place
-        if action[:2] == hero[:2] and action[2] == 1:
-            return "ACT(1)", (0, 0)
+        if action[:2] == hero[:2]:
+            if action[2] == 1:
+                return "ACT(1)", (0, 0)
+            elif action[2] == -1:
+                return "", (0, 0)
 
         if hero[0] > action[0]:
             cmd_dir = "LEFT"
@@ -294,26 +310,17 @@ class BotStateMachine:
 
         state = self.stateStack[-1]
 
-        hero = self.hero
-        exits = self.exits
+        if state.check_goal(self.hero):  # If the exit is reached, rebirth
+            self.append_stack("REBIRTH")
+            return self.act_state()
 
-        if not exits:
+        if not self.board.exits:
             # Leave the state, if there`s no exits
             self.stateStack.pop()
             return self.act_state()
         else:
-            if state.check_goal(hero):  # If the exit is reached, rebirth
-                self.append_stack("REBIRTH")
-                return self.act_state()
-
-            if not state.stateGoal:  # check if we have goal
-                state.stateGoal = self.board.bfs_nearest(
-                    hero, exits
-                )  # find nearest exit
-                if not state.stateGoal:  # no exit avaliable
-                    self.stateStack.pop()
-                    return self.act_state()
-
+            if state.stateGoal not in self.board.exits:
+                state.stateGoal = self.board.nearest_exit  # find nearest exit
             return self._next_move_calculation(state)
 
     @state_control
@@ -322,31 +329,31 @@ class BotStateMachine:
 
         state = self.stateStack[-1]
 
-        hero = self.hero
+        if state.check_goal(self.hero):
+            self.goldCollected += 1
+            state.reset()
+            if self.board.final_level and self.goldCollected > 3:
+                self.append_stack("EXIT")
+                return self.act_state()
 
-        if not self.board.nearest_gold:
+        if not self.board.golds:  # check if gold exists
             self.stateStack.pop()
             return self.act_state()
         else:
-            # TODO check if gold exists
-
-            # This is called when we pick the gold we looked for,
-            # but there`s gold on the map elsewhre
-            if state.check_goal(hero):
-                self.goldCollected += 1
-                state.reset()
-
-            state.stateGoal = self.board.nearest_gold
-
+            if state.stateGoal not in self.board.golds and self.board.nearest_gold:
+                # This is called when we pick the gold we looked for
+                state.stateGoal = self.board.nearest_gold
             return self._next_move_calculation(state)
+
 
     @state_control
     def _dodge(self):
         """ find action nearest to target by manhetan distance """
 
         state = self.stateStack[-1]
+        previous_state = self.stateStack[-2]
         target = state.stateGoal
-        state.dropPath()
+        previous_state.dropPath()
 
         lowest_dist = float("inf")
         optimal_move = None
@@ -365,10 +372,42 @@ class BotStateMachine:
 
     @state_control
     def _passive_hunt(self):
-        # TODO check sanity of attack
-        pass
+        """ attack if we are safe """
+
+        hero = self.hero
+        if hero not in self.actionspace:
+            self.stateStack.pop()
+            return self.act_state()
+        else:
+            target = self.board._targets[0]
+            self.stateStack.pop()
+            return (*target, 3)
 
     @state_control
     def _active_hunt(self):
         # TODO kill anyone on this field
         pass
+
+    @state_control
+    def _jump(self):
+        self.stateStack.pop()
+        return ()
+
+    @state_control
+    def _loot(self):
+        """ loot on dead players """
+
+        state = self.stateStack[-1]
+        state.stateGoal = self.board.nearest_dead_player
+        step_toward_loot = self._next_move_calculation(state)
+        self.stateStack.pop()
+        return step_toward_loot
+
+    @state_control
+    def _explore(self):
+        """ explore map adges """
+
+        state = self.stateStack[-1]
+        if not state.stateGoal:
+            state.stateGoal = self.board.nearest_transition
+        return self._next_move_calculation(state)

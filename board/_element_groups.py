@@ -33,7 +33,6 @@ _ELEMENT_GROUPS = {
             "WALL_BACK_ANGLE_RIGHT",
             "ANGLE_OUT_RIGHT",
             "ANGLE_OUT_LEFT",
-            "SPACE"
         ],
     "PERKS": [
             "UNSTOPPABLE_LASER_PERK",
@@ -46,5 +45,10 @@ _ELEMENT_GROUPS = {
             "ZOMBIE_START",
             "EXIT",
             "GOLD"
+        ],
+    "TARGETS": [
+            "ROBO_OTHER",
+            "FEMALE_ZOMBIE",
+            "MALE_ZOMBIE"
         ],
 }

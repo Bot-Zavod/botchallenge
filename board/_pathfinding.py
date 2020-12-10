@@ -25,6 +25,7 @@ class Node:
 
 
 class Mixin:
+
     def bfs_nearest(
         self, start: Tuple[int, int], end_points: List[Tuple[int, int]]
     ) -> Tuple[int, int]:

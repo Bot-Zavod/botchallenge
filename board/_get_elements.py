@@ -33,6 +33,20 @@ class Mixin:
         points = self._find_all([Element(el) for el in elements])
         return points
 
+    def get_other_live_heroes(self):
+        elements = _ELEMENT_GROUPS["ROBO_OTHER"]
+        points = self._find_all([Element(el) for el in elements])
+        return points
+
+    def get_other_dead_heroes(self):
+        """ search for corps far from starts, maybe they have gold """
+
+        starts = set(self._find_all([Element("START")]))
+        elements = _ELEMENT_GROUPS["ROBO_OTHER_DEAD"]
+        points = set(self._find_all([Element(el) for el in elements]))
+        points = list(points - starts)
+        return points
+
     def get_zombies(self):
         elements = _ELEMENT_GROUPS["ZOMBIE"]
         points = self._find_all([Element(el) for el in elements])

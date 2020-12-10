@@ -34,7 +34,8 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
 
         # extracting info from server massage
         board_json = json.loads(board_string)
-
+        self.final_level = (board_json["levelProgress"]["total"]
+                            == board_json["levelProgress"]["current"])
         hash_str = board_json["layers"][0][:60]
         translation = {  # dynamic elements of static board
             "◄": "˂",
@@ -49,28 +50,45 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         self._layer_size = int(sqrt(len(board_json["layers"][0])))
         self._board = [list(layer) for layer in board_json["layers"]]
 
-        # if board shifted save bool and shift modifier
-        if self.previous_board and (
-            self.previous_board._board_hash != self._board_hash
-        ):
-            self.shifted = True
-            # direction of last player move
-            self.shift_direction = shift_direction
-        else:
-            self.shifted = False
-
         # reusable info
         self._hero = self.get_hero()
         self.directions = ((-1, 0), (1, 0), (0, -1), (0, 1), (0, 0))
         self._jump_over = self.jump_over()
         self._non_barrier = self.non_barrier()
-        self.golds = self.get_golds()
-        self.exits = self.get_exits()
-        self.nearest_gold = self.bfs_nearest(self._hero, self.golds)
-        self.nearest_exit = self.bfs_nearest(self._hero, self.exits)
-        self.first_lasers = self.check_first_lasers()
+        self._targets = self.passive_attack_check()
 
-        return self.shifted
+        # if board shifted save bool and shift modifier
+        self.board_shifted = False
+        if self.previous_board and (
+            self.previous_board._board_hash != self._board_hash
+        ):
+            self.board_shifted = True
+            # direction of last player move
+            self.shift_direction = shift_direction
+
+            # if board doesn't shift wxist stay the same
+            self.exits = self.previous_board.exits
+            self.nearest_exit = self.previous_board.nearest_exit
+        else:
+            self.exits = self.get_exits()
+            self.nearest_exit = self.bfs_nearest(self._hero, self.exits)
+
+        self.golds = self.get_golds()
+        self.nearest_gold = self.bfs_nearest(self._hero, self.golds)
+
+        self.players = self.get_other_live_heroes()
+        self.nearest_player = self.bfs_nearest(self._hero, self.players)
+
+        self.dead_players = self.get_other_dead_heroes()
+        self.nearest_dead_player = self.bfs_nearest(self._hero, self.dead_players)
+
+        self.edge_transitions = self.get_edge_transitions()
+        self.nearest_transition = self.bfs_nearest(self._hero, self.edge_transitions)
+
+        print("nearest_gold: ", self.nearest_gold)
+        print("nearest_exit: ", self.nearest_exit)
+
+        return self.board_shifted
 
     def _find_all(self, elements: List[Element]) -> List[Tuple[int, int]]:
         _points = []
@@ -89,6 +107,7 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         for layer in element_layers:
             search_elements = element_layers[layer]
             for i in range(len(self._board[layer])):
+                # TODO use filter to SPEED UP!!! 🏃👮
                 if self._board[layer][i] in search_elements:
                     _points.append(self._strpos2pt(i))
         return _points
@@ -104,10 +123,8 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
 
     def to_string(self):
         return (
-            "Board:\n{brd}\nHero at: {hero}\nOther Heroes "
-            "at: {others}\nZombies at: {zmb}\nLasers at:"
-            " {lsr}\nHoles at : {hls}\nGolds at: "
-            "{gld}\nPerks at: {prk}".format(
+            "Board:\n{brd}\nHero at: {hero}\nOther Heroes at: {others}\n"
+            "Zombies at: {zmb}\nGolds at: {gld}\nPerks at: {prk}".format(
                 brd=self._line_by_line(),
                 hero=self.get_hero(),
                 others=self.get_other_heroes(),
