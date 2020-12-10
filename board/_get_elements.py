@@ -42,7 +42,7 @@ class Mixin:
         """ search for corps far from starts, maybe they have gold """
 
         starts = set(self._find_all([Element("START")]))
-        elements = _ELEMENT_GROUPS["ROBO_OTHER_DEAD"]
+        elements = _ELEMENT_GROUPS["ROBO_OTHER_DEAD"] + ["ZOMBIE_DIE"]
         points = set(self._find_all([Element(el) for el in elements]))
         points = list(points - starts)
         return points

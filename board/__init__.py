@@ -44,7 +44,7 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
             "▼": "˅",
             "$": ".",
         }
-        self._board_hash = hash(hash_str.translate(translation))
+        self._board_hash = hash_str.translate(translation)
 
         self.levelFinished = board_json["levelFinished"]
         self._layer_size = int(sqrt(len(board_json["layers"][0])))
@@ -80,10 +80,12 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         self.nearest_player = self.bfs_nearest(self._hero, self.players)
 
         self.dead_players = self.get_other_dead_heroes()
-        self.nearest_dead_player = self.bfs_nearest(self._hero, self.dead_players)
+        self.nearest_dead_player = self.bfs_nearest(
+            self._hero, self.dead_players)
 
         self.edge_transitions = self.get_edge_transitions()
-        self.nearest_transition = self.bfs_nearest(self._hero, self.edge_transitions)
+        self.nearest_transition = self.bfs_nearest(
+            self._hero, self.edge_transitions)
 
         print("nearest_gold: ", self.nearest_gold)
         print("nearest_exit: ", self.nearest_exit)

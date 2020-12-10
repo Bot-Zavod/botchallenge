@@ -50,16 +50,22 @@ class State:
             next_node = self.plannedPath.pop(0)
         return next_node
 
-    def shift_coord(self, shift: Tuple[int, int]) -> None:
+    def shift_coord(self, shift: Tuple[int, int]) -> bool:
         # tuples could not be edited so we rewrite them
+
         if self.stateGoal:
             self.stateGoal = (self.stateGoal[0] + shift[0],
                               self.stateGoal[1] + shift[1])
+            if self.code == BotStateMachine.states["EXPLORE"]:
+                #  explore state is not safe on shift
+                return True
+
         if self.plannedPath:
             for i in range(len(self.plannedPath)):
                 cell = self.plannedPath[i]
                 self.plannedPath[i] = (cell[0] + shift[0],
                                        cell[1] + shift[1])
+        return False
 
     def check_goal(self, hero: Tuple[int, int]) -> bool:
         """ if are we already on our target coordinate """
@@ -87,7 +93,7 @@ class BotStateMachine:
     url = "https://epam-botchallenge.com/codenjoy-balancer/rest/game/settings/get"
     controls = requests.get(url).json()[0]
     # perkAvailability  = controls["perkAvailability"]
-    # gunRecharge       = controls["gunRecharge"]
+    gunRecharge = controls["gunRecharge"]
     # deathRayRange     = controls["deathRayRange"]
     # gunShotQueue      = controls["gunShotQueue"]
     # gunRestTime       = controls["gunRestTime"]
@@ -165,6 +171,9 @@ class BotStateMachine:
         self.hero = self.board._hero
         self.actionspace = self.board.get_actionspace()
 
+        if self.firingTimer > 0:  # recharginf the gun
+            self.firingTimer -= 1
+
         # rebirth if killed
         if not self.board.is_me_alive():
             self.append_stack("REBIRTH")
@@ -185,7 +194,6 @@ class BotStateMachine:
         if self.stateStack:
             current_state = self.stateStack[-1]
             print("state Goal: ", current_state.stateGoal)
-            print("state plannedPath: ", current_state.plannedPath)
 
         # saving directin of our move to it to board on update
         next_cmd, self.shift_direction = self._cmd_to_action(next_move)
@@ -217,8 +225,12 @@ class BotStateMachine:
             raise Exception(f"Tring to append non excisting {state_name} to stateStack")
 
     def shift_stack(self) -> None:
-        for state in self.stateStack:
-            state.shift_coord(self.shift_direction)
+        correct_state = []
+        for i in range(len(self.stateStack)):
+            state = self.stateStack[i]
+            if not state.shift_coord(self.shift_direction):
+                correct_state.append(state)
+        self.stateStack = correct_state
 
     def _cmd_to_action(self, action: Tuple[int, int, int]
     ) -> Tuple[str, Tuple[int, int]]:
@@ -266,12 +278,18 @@ class BotStateMachine:
 
         return abs((dest[0] - self.hero[0]) + (dest[1] - self.hero[1])) > 1
 
+    def _check_shoot(self) -> bool:
+        """ check if passed recoil time """
+
+        return self.firingTimer == 0
+
     def _next_move_calculation(self, state: State) -> Tuple[int, int, int]:
         """ check plannedPath and get next move """
-
+        
+        print("state Goal: ", state.stateGoal)
         if not state.plannedPath:
             state.plannedPath = self.board.astar(self.hero, state.stateGoal)
-
+        print("state plannedPath: ", state.plannedPath)
         next_node = state.pop_path_node(hero=self.hero)
 
         if next_node:
@@ -345,7 +363,6 @@ class BotStateMachine:
                 state.stateGoal = self.board.nearest_gold
             return self._next_move_calculation(state)
 
-
     @state_control
     def _dodge(self):
         """ find action nearest to target by manhetan distance """
@@ -374,13 +391,13 @@ class BotStateMachine:
     def _passive_hunt(self):
         """ attack if we are safe """
 
-        hero = self.hero
-        if hero not in self.actionspace:
-            self.stateStack.pop()
+        self.stateStack.pop()
+
+        if (self.hero not in self.actionspace) or (not self._check_shoot()):
             return self.act_state()
         else:
             target = self.board._targets[0]
-            self.stateStack.pop()
+            self.firingTimer = BotStateMachine.gunRecharge
             return (*target, 3)
 
     @state_control
@@ -390,6 +407,8 @@ class BotStateMachine:
 
     @state_control
     def _jump(self):
+        """ do nothing in jump """
+
         self.stateStack.pop()
         return ()
 

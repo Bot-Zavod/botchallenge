@@ -208,7 +208,6 @@ class Mixin:
             [(0, y) for y in range(1, 19)] +
             [(19, y) for y in range(1, 19)]
         )
-
         floor = Element("FLOOR").get_char()
         transitions = []
         for edge in edges:
