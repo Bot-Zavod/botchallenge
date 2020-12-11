@@ -4,6 +4,7 @@ from functools import wraps
 import requests
 
 from board import Board
+from exit_compass import ExitCompass
 
 
 def state_control(func):
@@ -15,6 +16,7 @@ def state_control(func):
         state_code = self.state_methods_names.index(func_name)
         actual_state_code = self.stateStack[-1].code
         if actual_state_code != state_code:
+            state_name = ""
             for name, code in self.states.items():
                 if code == actual_state_code:
                     state_name = name
@@ -23,6 +25,9 @@ def state_control(func):
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+exit_compass = ExitCompass()
 
 
 class State:
@@ -153,23 +158,12 @@ class BotStateMachine:
         # culculate shift
         # for jump stays the same move
         self.shift_direction: Tuple[int, int] = None
+        self.hero_rel_pos: Tuple[int, int] = (0, 0)
+        self.hero_start_image: str = None
 
     def yield_decision(self, board_string: str) -> str:
         # update board
-        board_shifted = self.board.update_board(board_string,
-                                                self.shift_direction)
-        # if new board first layer differs from previous
-        # we need to shift our goals and paths
-        if board_shifted:
-            self.shift_stack()
-        print(self.board.to_string(), "\n")
-
-        if self.board.previous_board:
-            print("board shifted:\t", self.board.board_shifted)
-
-        # Get battlefield information
-        self.hero = self.board._hero
-        self.actionspace = self.board.get_actionspace()
+        self.set_up_board(board_string)
 
         if self.firingTimer > 0:  # recharginf the gun
             self.firingTimer -= 1
@@ -201,6 +195,40 @@ class BotStateMachine:
         print(f"Sending Command: {next_cmd}")
         return next_cmd
 
+    def set_up_board(self, board_string: str):
+        board_shifted = self.board.update_board(board_string,
+                                                self.shift_direction)
+        # if new board first layer differs from previous
+        # we need to shift our goals and paths
+        if board_shifted:
+            self.shift_stack()
+        print(self.board.to_string(), "\n")
+
+        self.hero = self.board._hero
+
+        # update relative position from start
+        hero_move = self.board.get_hero_move()
+        self.hero_rel_pos = (self.hero_rel_pos[0] + hero_move[0],
+                             self.hero_rel_pos[1] + hero_move[1])
+        if not self.board.previous_board:  # hero spawned on start
+            self.hero_start_image = self.board.make_snapshot(self.hero)
+        print("hero_rel_pos: ", self.hero_rel_pos)
+        for dest, coords in self.board.snapshots.items():
+            hero_portal_vec = exit_compass._comp_path_vec(coords, self.hero)
+            ref_vec = exit_compass._comp_path_vec(hero_portal_vec, self.hero_rel_pos)
+            exit_compass.add_ref_vec(
+                source=self.hero_start_image,
+                dest=dest,
+                ref_vec=ref_vec
+            )
+        exit_compass.print_dict()
+
+        if self.board.previous_board:
+            print("board shifted:\t", self.board.board_shifted)
+
+        # Get battlefield information
+        self.actionspace = self.board.get_actionspace()
+
     def act_state(self) -> Tuple[int, int, int]:
         """ set state if none and return top state action """
 
@@ -216,11 +244,13 @@ class BotStateMachine:
 
         return self.state_methods[self.stateStack[-1].code]()
 
-    def append_stack(
-        self, state_name: str, goal: Tuple[int, int] = None
-    ) -> None:
+    def append_stack(self, state_name: str,
+                     goal: Tuple[int, int] = None) -> None:
+        """ add new state on a top of a stack """
+
         if state_name in BotStateMachine.states:
-            self.stateStack.append(State(BotStateMachine.states[state_name], goal=goal))
+            self.stateStack.append(
+                State(BotStateMachine.states[state_name], goal=goal))
         else:
             raise Exception(f"Tring to append non excisting {state_name} to stateStack")
 
@@ -232,8 +262,8 @@ class BotStateMachine:
                 correct_state.append(state)
         self.stateStack = correct_state
 
-    def _cmd_to_action(self, action: Tuple[int, int, int]
-    ) -> Tuple[str, Tuple[int, int]]:
+    def _cmd_to_action(self,
+                       action: Tuple[int, int, int]) -> Tuple[str, Tuple[int, int]]:
         """ transforms coordinates and action code to server command """
         print("action: ", action)
         if not action:
@@ -248,7 +278,7 @@ class BotStateMachine:
                 return "ACT(1)", (0, 0)
             elif action[2] == -1:
                 return "", (0, 0)
-
+        shift = (0, 0)
         if hero[0] > action[0]:
             cmd_dir = "LEFT"
             shift = (-1, 0)
@@ -285,7 +315,7 @@ class BotStateMachine:
 
     def _next_move_calculation(self, state: State) -> Tuple[int, int, int]:
         """ check plannedPath and get next move """
-        
+
         print("state Goal: ", state.stateGoal)
         if not state.plannedPath:
             state.plannedPath = self.board.astar(self.hero, state.stateGoal)
@@ -302,7 +332,7 @@ class BotStateMachine:
             raise Exception("no next_node to use")
 
         # Make sure it`s safe
-        if next_node in self.actionspace:
+        if (*next_node, code) in self.actionspace:
             return next_move  # If it`s safe - act as planned
         else:
             # If it`s unsafe - dodge
@@ -314,7 +344,7 @@ class BotStateMachine:
     """
 
     @state_control
-    def _rebirth(self) -> tuple:
+    def _rebirth(self) -> Tuple:
         """ if we are dead, reset else standing on exit, try to shoot """
 
         # TODO check if we can kill anyone
@@ -331,15 +361,28 @@ class BotStateMachine:
         if state.check_goal(self.hero):  # If the exit is reached, rebirth
             self.append_stack("REBIRTH")
             return self.act_state()
-
-        if not self.board.exits:
-            # Leave the state, if there`s no exits
-            self.stateStack.pop()
-            return self.act_state()
-        else:
-            if state.stateGoal not in self.board.exits:
-                state.stateGoal = self.board.nearest_exit  # find nearest exit
-            return self._next_move_calculation(state)
+        if not state.stateGoal:
+            nearest_exit = exit_compass.calc_vec(
+                start=self.hero_start_image,
+                rel_pos=self.hero_rel_pos,
+            )
+            if not nearest_exit:
+                # Leave the state, if there`s no exits
+                self.stateStack.pop()
+                self.append_stack("EXPLORE")
+                return self.act_state()
+            elif nearest_exit not in self.board.exits:
+                shortest_path = float("inf")
+                nearest_transition = None
+                for transition in self.get_edge_transitions():
+                    exit_path = (nearest_exit[0] - transition[0],
+                                 nearest_exit[1] - transition[1])
+                    manh_path = exit_path[0] ** 2 + exit_path[1] ** 2
+                    if manh_path < shortest_path:
+                        shortest_path = manh_path
+                        nearest_transition = transition
+                state.stateGoal = nearest_transition
+        return self._next_move_calculation(state)
 
     @state_control
     def _gold(self) -> Tuple[int, int, int]:
@@ -368,24 +411,19 @@ class BotStateMachine:
         """ find action nearest to target by manhetan distance """
 
         state = self.stateStack[-1]
-        previous_state = self.stateStack[-2]
         target = state.stateGoal
+        previous_state = self.stateStack[-2]
         previous_state.dropPath()
+        self.stateStack.pop()
 
         lowest_dist = float("inf")
         optimal_move = None
         for action in self.actionspace:
-            dist = self.board._mht_dist(action, target)
+            dist = self.board._mht_dist(action[:2], target)
             if dist < lowest_dist:
                 lowest_dist = dist
                 optimal_move = action
-
-        if self._check_jump(optimal_move):
-            code = 1  # jump code
-        else:
-            code = -1  # ignore code for walk
-        self.stateStack.pop()
-        return (*optimal_move, code)
+        return optimal_move
 
     @state_control
     def _passive_hunt(self):
@@ -393,7 +431,7 @@ class BotStateMachine:
 
         self.stateStack.pop()
 
-        if (self.hero not in self.actionspace) or (not self._check_shoot()):
+        if ((*self.hero, -1) not in self.actionspace) or (not self._check_shoot()):
             return self.act_state()
         else:
             target = self.board._targets[0]
