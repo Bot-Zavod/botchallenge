@@ -44,7 +44,10 @@ _ELEMENT_GROUPS = {
             "START",
             "ZOMBIE_START",
             "EXIT",
-            "GOLD"
+            "GOLD",
+            "UNSTOPPABLE_LASER_PERK",
+            "DEATH_RAY_PERK",
+            "UNLIMITED_FIRE_PERK",
         ],
     "TARGETS": [
             "ROBO_OTHER",

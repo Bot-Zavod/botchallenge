@@ -1,5 +1,5 @@
 import pickle
-from os import path
+from os import path, remove
 
 from typing import Tuple
 
@@ -16,6 +16,11 @@ class ExitCompass():
         else:
             self.nav_dict = dict()
 
+    def clean_compass(self):
+        if path.exists(ExitCompass.file_name):
+            remove(ExitCompass.file_name)
+        self.nav_dict = dict()
+
     def pickle_save(self):
         """ saves adjacencies list to pickle """
 
@@ -27,6 +32,12 @@ class ExitCompass():
         """ vectors substraction """
 
         return (ref[0] - sample[0], ref[1] - sample[1])
+
+    def _comp_sum_vec(self, ref: Tuple[int, int],
+                       sample: Tuple[int, int]) -> Tuple[int, int]:
+        """ vectors sum """
+
+        return (ref[0] + sample[0], ref[1] + sample[1])
 
     def calc_vec(self, start: str,
                  rel_pos: Tuple[int, int]) -> Tuple[int, int]:
@@ -46,7 +57,7 @@ class ExitCompass():
                 manh_path = exit_path[0] ** 2 + exit_path[1] ** 2
                 if manh_path < shortest_path:
                     shortest_path = manh_path
-                    nearest_exit = exit_paths[i]
+                    nearest_exit = exit_path
             return nearest_exit
 
     def add_ref_vec(self, source: str, dest: str,
@@ -57,17 +68,17 @@ class ExitCompass():
             self.nav_dict[source] = set()
 
         new_node = (dest, ref_vec)
-        if new_node in self.nav_dict[source]:
+        if source == dest or new_node in self.nav_dict[source]:
             return
 
         self.nav_dict[source].add(new_node)
-        if dest[0][0] == "S":  # bidirectional dependency
-            if dest not in self.nav_dict:
+        if dest[0][0] == "S":
+            if dest not in self.nav_dict:  # bidirectional dependency
                 self.nav_dict[dest] = {(dest, (ref_vec[0] * -1,
                                                ref_vec[1] * -1))}
 
         # append data in referenced nodes
-        references = self.nav_dict[source]
+        references = self.nav_dict[source].copy()
         for ref in references:
             if ref[0][0] == "S" and ref[0] != dest:  # if it's new start
                 new_ref_vec = self._comp_path_vec(ref_vec, ref[1])
@@ -83,8 +94,8 @@ class ExitCompass():
 
     def print_dict(self):
         for node in self.nav_dict:
-            print(node)
-            for child in self.nav_dict:
+            print(f"<{node}>")
+            for child in self.nav_dict[node]:
                 print("\t", child)
 
 

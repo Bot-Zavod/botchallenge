@@ -35,6 +35,7 @@ class Mixin:
         hero = self._hero
 
         non_barrier = set(self.non_barrier())
+        second_layer_barrier = set(self.second_layer_barrier())
 
         first_lasers, second_lasers = self.check_lasers()
         first_overlayed_lasers, second_overlayed_lasers = self.get_overlayed_lasers()
@@ -48,11 +49,13 @@ class Mixin:
                 hero_step.add(step)
 
             jump = (hero[0] + act[0] * 2, hero[1] + act[1] * 2)
-            if jump not in non_barrier:  # jump on wall
+            if jump in second_layer_barrier:  # jump on wall
                 if step in non_barrier:
                     jump = step
                 else:
                     continue
+            elif jump not in non_barrier:
+                continue
             hero_jump.add(jump)
 
         hero_step = (
@@ -197,7 +200,7 @@ class Mixin:
                 shift = self.shift_direction
                 previous_hero = (previous_hero[0] + shift[0],
                                  previous_hero[1] + shift[1])
-            hero_move = (previous_hero[0] - hero[0], previous_hero[1] - hero[1])
+            hero_move = (hero[0] - previous_hero[0], hero[1] - previous_hero[1])
             return hero_move
         else:
             return (0, 0)
@@ -209,7 +212,7 @@ class Mixin:
 
         for i in (0, 1):  # check that we sea full surraunding
             if not(2 <= center[i] <= 17):
-                if not(4 > hero[i] or hero[0] > 15):
+                if not(4 > hero[i] or hero[i] > 15):
                     return ""
 
         translation = {  # dynamic elements of static board
@@ -218,14 +221,18 @@ class Mixin:
             "▲": "˄",
             "▼": "˅",
             "$": ".",
+            "l": ".",
+            "r": ".",
+            "f": ".",
         }
+        translation = {ord(key): ord(value) for key, value in translation.items()}
         _strpos = self._xy2strpos(*center)
         snapshot = self._board[0][_strpos]  # S or E
         for y in range(-2, 3):
             for x in range(-2, 3):
-                x = center[0] + x
-                y = center[1] + y
-                if not(0 <= x <= 19 and 0 <= y <= 19):  # cut adges
+                x_pos = center[0] + x
+                y_pos = center[1] + y
+                if not(0 <= x_pos <= 19 and 0 <= y_pos <= 19):  # cut adges
                     continue
 
                 _strpos = self._xy2strpos(x, y)
@@ -240,6 +247,21 @@ class Mixin:
     def is_me_jumping(self) -> bool:
         points = self._find_all([Element("ROBO_FLYING")])
         return len(points) == 1
+
+    def collected_gold(self) -> bool:
+        hero = self._hero
+        previous_board = self.previous_board
+
+        if self.board_shifted:  # if shifted adapt to new coordinates
+            shift = self.shift_direction
+            cell_before = (hero[0] + shift[0], hero[1] + shift[1])
+        else:
+            cell_before = hero
+
+        _strpos = self._xy2strpos(*cell_before)
+        if previous_board and previous_board._board[0][_strpos] == "$":
+            return True
+        return False
 
     def passive_attack_check(self) -> List[Tuple[int, int]]:
         """ check targets to kill in our vision """
@@ -257,7 +279,7 @@ class Mixin:
                 trg = (hero[0] + d[0]*r, hero[1] + d[1]*r)
                 if trg in targets:
                     reachable_targets.append(trg)
-        return reachable_targets
+        return list(reachable_targets)
 
     def get_edge_transitions(self) -> List[Tuple[int, int]]:
         """ map edge transitions to another parts of map """
@@ -304,6 +326,8 @@ class Mixin:
         hero = self._hero
         directions = self.directions
         previous_board = self.previous_board
+        if not previous_board:
+            return []
         flying_players = self._find_all([Element("ROBO_OTHER_FLYING")])
         previous_players = previous_board._find_all([Element("ROBO_OTHER")])
 
@@ -333,4 +357,4 @@ class Mixin:
             hero_shoot.add((hero[0] + act[0],
                             hero[1] + act[1]))
         death_point = hero_shoot & landing_points
-        return death_point
+        return list(death_point)

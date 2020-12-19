@@ -43,6 +43,9 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
             "▲": "˄",
             "▼": "˅",
             "$": ".",
+            "l": ".",
+            "r": ".",
+            "f": ".",
         }
         self._board_hash = hash_str.translate(translation)
 
@@ -55,7 +58,7 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         self.directions = ((-1, 0), (1, 0), (0, -1), (0, 1), (0, 0))
         self._jump_over = self.jump_over()
         self._non_barrier = self.non_barrier()
-        self._targets = self.get_falling_players()
+        self._targets = self.get_falling_players() + self.passive_attack_check()
 
         # if board shifted save bool and shift modifier
         self.board_shifted = False
@@ -97,7 +100,9 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         portals = self.starts + self.exits
         self.snapshots = dict()
         for portal in portals:
-            self.snapshots[self.make_snapshot(portal)] = portal
+            snap = self.make_snapshot(portal)
+            if snap:
+                self.snapshots[snap] = portal
 
         self.golds = self.get_golds()
         self.nearest_gold = self.bfs_nearest(self._hero, self.golds)
@@ -108,7 +113,6 @@ class Board(_get_elements.Mixin, _pathfinding.Mixin, _custom.Mixin):
         self.dead_players = self.get_other_dead_heroes()
         self.nearest_dead_player = self.bfs_nearest(
             self._hero, self.dead_players)
-
 
         print("nearest_gold: ", self.nearest_gold)
         print("nearest_exit: ", self.nearest_exit)

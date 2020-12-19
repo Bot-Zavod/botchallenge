@@ -204,6 +204,9 @@ class BotStateMachine:
             self.shift_stack()
         print(self.board.to_string(), "\n")
 
+        if not self.board.previous_board:
+            exit_compass.clean_compass()
+
         self.hero = self.board._hero
 
         # update relative position from start
@@ -213,9 +216,11 @@ class BotStateMachine:
         if not self.board.previous_board:  # hero spawned on start
             self.hero_start_image = self.board.make_snapshot(self.hero)
         print("hero_rel_pos: ", self.hero_rel_pos)
+        print("gold Collected: ", self.goldCollected)
+
         for dest, coords in self.board.snapshots.items():
             hero_portal_vec = exit_compass._comp_path_vec(coords, self.hero)
-            ref_vec = exit_compass._comp_path_vec(hero_portal_vec, self.hero_rel_pos)
+            ref_vec = exit_compass._comp_sum_vec(hero_portal_vec, self.hero_rel_pos)
             exit_compass.add_ref_vec(
                 source=self.hero_start_image,
                 dest=dest,
@@ -235,10 +240,10 @@ class BotStateMachine:
         if not self.stateStack:  # If state is None - choose another one
             if self.board.nearest_gold:
                 self.append_stack("GOLD")
-            elif self.board.nearest_exit:
-                self.append_stack("EXIT")
             elif self.board.nearest_dead_player:
                 self.append_stack("LOOT")
+            elif True:
+                self.append_stack("EXIT")
             elif self.board.nearest_transition:
                 self.append_stack("EXPLORE")
 
@@ -364,24 +369,31 @@ class BotStateMachine:
         if not state.stateGoal:
             nearest_exit = exit_compass.calc_vec(
                 start=self.hero_start_image,
-                rel_pos=self.hero_rel_pos,
-            )
+                rel_pos=self.hero_rel_pos)
+            print("nearest_exit: ", nearest_exit)
+
             if not nearest_exit:
                 # Leave the state, if there`s no exits
-                self.stateStack.pop()
                 self.append_stack("EXPLORE")
                 return self.act_state()
-            elif nearest_exit not in self.board.exits:
+            else:
+                nearest_hero_exit = (self.hero[0] + nearest_exit[0],
+                                     self.hero[1] + nearest_exit[1])
+                print("nearest_hero_exit: ", nearest_hero_exit)
+
+            if not(0 <= nearest_hero_exit[0] <= 19 and 0 <= nearest_hero_exit[1] <= 19):
                 shortest_path = float("inf")
                 nearest_transition = None
-                for transition in self.get_edge_transitions():
-                    exit_path = (nearest_exit[0] - transition[0],
-                                 nearest_exit[1] - transition[1])
+                for transition in self.board.get_edge_transitions():
+                    exit_path = (nearest_hero_exit[0] - transition[0],
+                                 nearest_hero_exit[1] - transition[1])
                     manh_path = exit_path[0] ** 2 + exit_path[1] ** 2
                     if manh_path < shortest_path:
                         shortest_path = manh_path
                         nearest_transition = transition
                 state.stateGoal = nearest_transition
+            else:
+                state.stateGoal = nearest_hero_exit
         return self._next_move_calculation(state)
 
     @state_control
@@ -390,12 +402,13 @@ class BotStateMachine:
 
         state = self.stateStack[-1]
 
-        if state.check_goal(self.hero):
+        if self.board.collected_gold():
             self.goldCollected += 1
             state.reset()
-            if self.board.final_level and self.goldCollected > 3:
-                self.append_stack("EXIT")
-                return self.act_state()
+
+        if self.board.final_level and self.goldCollected > 2:
+            self.append_stack("EXIT")
+            return self.act_state()
 
         if not self.board.golds:  # check if gold exists
             self.stateStack.pop()
@@ -412,8 +425,7 @@ class BotStateMachine:
 
         state = self.stateStack[-1]
         target = state.stateGoal
-        previous_state = self.stateStack[-2]
-        previous_state.dropPath()
+        self.stateStack[-2].dropPath()  # previous_state
         self.stateStack.pop()
 
         lowest_dist = float("inf")
